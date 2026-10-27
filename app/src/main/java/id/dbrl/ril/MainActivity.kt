@@ -32,6 +32,8 @@ import android.widget.Toast
 
 /**
  * Satu layar: halaman kasir/gudang di WebView, dikunci sebagai satu-satunya aplikasi.
+ * Kalau tablet boleh dua mode, bilah atas berisi tab Kasir | Gudang untuk pindah sendiri.
+ * Setiap kali masuk ke Gudang, sesi gudang sebelumnya dikeluarkan: harus masuk lagi dengan PIN.
  * Menu pemilik: ketuk pojok kanan atas 5 kali dalam 3 detik, lalu masukkan PIN pemilik.
  */
 class MainActivity : Activity() {
@@ -39,6 +41,14 @@ class MainActivity : Activity() {
     private lateinit var web: WebView
     private lateinit var galat: LinearLayout
     private lateinit var galatTeks: TextView
+    private lateinit var bilah: LinearLayout
+    private lateinit var tabKasir: TextView
+    private lateinit var tabGudang: TextView
+
+    /** Halaman gudang berikutnya yang selesai dimuat harus berakhir di halaman masuk (PIN). */
+    private var wajibKeluarGudang = true
+    /** Riwayat mundur dibuang setelah halaman berikutnya selesai dimuat (pindah mode / muat ulang). */
+    private var bersihkanRiwayat = false
 
     /** Mode perawatan: kunci dilepas sampai pemilik memilih "Kunci lagi" (tidak bertahan setelah restart). */
     private var perawatan = false
@@ -55,6 +65,7 @@ class MainActivity : Activity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContentView(bangunLayar())
         siapkanWeb()
+        perbaruiBilah()
         web.loadUrl(setelan.alamat)
         if (!setelan.punyaPin) mintaPinBaru(wajib = true)
     }
@@ -83,8 +94,25 @@ class MainActivity : Activity() {
 
     private fun bangunLayar(): View {
         val akar = FrameLayout(this)
+        val kolom = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        akar.addView(kolom, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+
+        bilah = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setBackgroundColor(Color.parseColor("#2A2724"))
+            setPadding(dp(8), 0, dp(64), 0)
+        }
+        tabKasir = buatTab("Kasir") { gantiKe(Setelan.MODE_KASIR) }
+        tabGudang = buatTab("Gudang") { gantiKe(Setelan.MODE_GUDANG) }
+        bilah.addView(tabKasir)
+        bilah.addView(tabGudang)
+        kolom.addView(bilah, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
+
+        val isi = FrameLayout(this)
+        kolom.addView(isi, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         web = WebView(this)
-        akar.addView(web, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        isi.addView(web, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
 
         galat = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -100,17 +128,71 @@ class MainActivity : Activity() {
         }
         val coba = Button(this).apply {
             text = "Coba lagi"
-            setOnClickListener { galat.visibility = View.GONE; web.loadUrl(setelan.alamat) }
+            setOnClickListener { galat.visibility = View.GONE; bersihkanRiwayat = true; web.loadUrl(setelan.alamat) }
         }
         galat.addView(galatTeks)
         galat.addView(coba, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(16) })
-        akar.addView(galat, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        isi.addView(galat, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
 
         // Pemicu menu pemilik: kotak tak terlihat di pojok kanan atas.
         val pojok = View(this).apply { setOnClickListener { ketukPojok() } }
         akar.addView(pojok, FrameLayout.LayoutParams(dp(56), dp(56), Gravity.TOP or Gravity.END))
         return akar
     }
+
+    private fun buatTab(judul: String, klik: () -> Unit) = TextView(this).apply {
+        text = judul
+        textSize = 17f
+        gravity = Gravity.CENTER
+        setPadding(dp(22), 0, dp(22), 0)
+        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        setOnClickListener { klik() }
+    }
+
+    private fun perbaruiBilah() {
+        bilah.visibility = if (setelan.bisaPindah) View.VISIBLE else View.GONE
+        for ((tab, m) in listOf(tabKasir to Setelan.MODE_KASIR, tabGudang to Setelan.MODE_GUDANG)) {
+            val aktif = setelan.mode == m
+            tab.setTextColor(Color.parseColor(if (aktif) "#FFFFFF" else "#A8A29A"))
+            tab.setTypeface(null, if (aktif) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+            tab.setBackgroundColor(Color.parseColor(if (aktif) "#C2571A" else "#2A2724"))
+        }
+    }
+
+    /** Pindah mode. Keluar dari Gudang = sesi gudang ditutup, jadi masuk lagi wajib PIN. */
+    private fun gantiKe(baru: String) {
+        if (baru == setelan.mode) return
+        val dariGudang = setelan.mode == Setelan.MODE_GUDANG
+        setelan.mode = baru
+        perbaruiBilah()
+        if (dariGudang) keluarGudang { bukaMode() } else bukaMode()
+    }
+
+    private fun bukaMode() {
+        galat.visibility = View.GONE
+        bersihkanRiwayat = true
+        if (setelan.mode == Setelan.MODE_GUDANG) wajibKeluarGudang = true
+        web.loadUrl(setelan.alamat)
+    }
+
+    /**
+     * Tutup sesi gudang: kirim formulir Keluar dari halaman yang sedang terbuka (keepalive: tetap
+     * terkirim walau halaman langsung diganti), lalu hapus cookie sesinya sebagai cadangan.
+     */
+    private fun keluarGudang(lanjut: () -> Unit) {
+        val js = "(function(){var f=document.querySelector('form[action\$=\"/keluar/\"]');if(!f)return false;" +
+            "fetch(f.action,{method:'POST',body:new URLSearchParams(new FormData(f)),credentials:'same-origin',keepalive:true});return true;})()"
+        web.evaluateJavascript(js) {
+            web.postDelayed({
+                val cm = CookieManager.getInstance()
+                cm.setCookie(setelan.alamatGudang, "gudang_sessionid=; Max-Age=0; Path=/; Secure; HttpOnly")
+                cm.flush()
+                lanjut()
+            }, 400)
+        }
+    }
+
+    private fun halamanMasuk(url: String?) = url != null && (url.contains("/masuk") || url.contains("/login"))
 
     private fun siapkanWeb() {
         WebView.setWebContentsDebuggingEnabled(false)
@@ -134,7 +216,21 @@ class MainActivity : Activity() {
             }
 
             override fun onReceivedError(view: WebView, req: WebResourceRequest, err: WebResourceError) {
-                if (req.isForMainFrame) tampilGalat()
+                if (!req.isForMainFrame) return
+                // Mundur ke halaman hasil kirim formulir: bukan masalah sambungan, buka ulang saja.
+                if (err.description?.contains("ERR_CACHE_MISS") == true) { bersihkanRiwayat = true; view.loadUrl(setelan.alamat); return }
+                tampilGalat()
+            }
+
+            override fun onPageFinished(view: WebView, url: String?) {
+                if (bersihkanRiwayat) { bersihkanRiwayat = false; view.clearHistory() }
+                val diGudang = url != null && Uri.parse(url).port == Uri.parse(setelan.alamatGudang).port &&
+                    Uri.parse(url).host == Uri.parse(setelan.alamatGudang).host
+                if (setelan.mode == Setelan.MODE_GUDANG && wajibKeluarGudang && diGudang) {
+                    wajibKeluarGudang = false
+                    // Masih ada sesi dari tadi (mis. aplikasi dibuka ulang): keluarkan dulu, wajib PIN.
+                    if (!halamanMasuk(url)) keluarGudang { bersihkanRiwayat = true; view.loadUrl(setelan.alamat) }
+                }
             }
         }
         web.webChromeClient = object : WebChromeClient() {
@@ -167,7 +263,12 @@ class MainActivity : Activity() {
 
     @Deprecated("Tombol kembali: mundur di halaman, tidak keluar aplikasi")
     override fun onBackPressed() {
-        if (web.canGoBack()) web.goBack()
+        val riwayat = web.copyBackForwardList()
+        if (riwayat.currentIndex <= 0) return
+        val sebelum = riwayat.getItemAtIndex(riwayat.currentIndex - 1).url
+        // Tidak mundur ke halaman masuk (formulirnya sudah basi) atau ke mode lain.
+        if (halamanMasuk(sebelum) || Uri.parse(sebelum).port != Uri.parse(web.url ?: "").port) return
+        web.goBack()
     }
 
     // ------------------------------------------------------------------ menu pemilik
@@ -231,10 +332,10 @@ class MainActivity : Activity() {
     private fun menuPemilik() {
         val pemilik = Kebijakan.pemilik(this)
         val pilihan = mutableListOf<Pair<String, () -> Unit>>(
-            "Muat ulang halaman" to { galat.visibility = View.GONE; web.loadUrl(setelan.alamat) },
+            "Muat ulang halaman" to { galat.visibility = View.GONE; bersihkanRiwayat = true; web.loadUrl(setelan.alamat) },
             "Wi-Fi" to { bukaPengaturan(Settings.ACTION_WIFI_SETTINGS) },
             "Buka Tailscale" to { bukaTailscale() },
-            "Mode: ${if (setelan.mode == Setelan.MODE_KASIR) "Kasir" else "Gudang"} (ganti)" to { gantiMode() },
+            "Mode tablet: ${labelPilihan()} (ganti)" to { gantiMode() },
             "Ubah alamat server" to { ubahAlamat() },
             "Sembunyikan / munculkan aplikasi" to { aturAplikasi() },
             "Ganti PIN pemilik" to { mintaPinBaru(wajib = false) },
@@ -261,12 +362,22 @@ class MainActivity : Activity() {
         startActivity(i)   // Tailscale ada di daftar boleh lock task, jadi kunci tidak perlu dilepas
     }
 
+    private fun labelPilihan() = when (setelan.pilihanMode) {
+        Setelan.MODE_KASIR -> "Kasir saja"
+        Setelan.MODE_GUDANG -> "Gudang saja"
+        else -> "Kasir & Gudang"
+    }
+
     private fun gantiMode() {
-        val nama = arrayOf("Gudang", "Kasir")
-        val kini = if (setelan.mode == Setelan.MODE_KASIR) 1 else 0
+        val nilai = arrayOf(Setelan.PILIHAN_KEDUANYA, Setelan.MODE_KASIR, Setelan.MODE_GUDANG)
+        val nama = arrayOf("Kasir & Gudang (karyawan bisa pindah di bilah atas)", "Kasir saja", "Gudang saja")
+        val kini = nilai.indexOf(setelan.pilihanMode).coerceAtLeast(0)
         AlertDialog.Builder(this).setTitle("Mode tablet ini").setSingleChoiceItems(nama, kini) { d, i ->
-            setelan.mode = if (i == 1) Setelan.MODE_KASIR else Setelan.MODE_GUDANG
-            d.dismiss(); web.loadUrl(setelan.alamat)
+            d.dismiss()
+            val dariGudang = setelan.mode == Setelan.MODE_GUDANG
+            setelan.pilihanMode = nilai[i]
+            perbaruiBilah()
+            if (dariGudang && setelan.mode != Setelan.MODE_GUDANG) keluarGudang { bukaMode() } else bukaMode()
         }.show()
     }
 
@@ -281,11 +392,11 @@ class MainActivity : Activity() {
                 val u = isian.text.toString().trim()
                 if (!u.startsWith("https://")) { pesan("Alamat harus diawali https://"); return@setPositiveButton }
                 if (kasir) setelan.alamatKasir = u else setelan.alamatGudang = u
-                web.loadUrl(setelan.alamat)
+                bukaMode()
             }
             .setNeutralButton("Bawaan") { _, _ ->
                 if (kasir) setelan.alamatKasir = Setelan.ALAMAT_KASIR else setelan.alamatGudang = Setelan.ALAMAT_GUDANG
-                web.loadUrl(setelan.alamat)
+                bukaMode()
             }
             .setNegativeButton("Batal", null).show()
     }
@@ -311,7 +422,7 @@ class MainActivity : Activity() {
         val am = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
         val versi = packageManager.getPackageInfo(packageName, 0).versionName
         val teks = buildString {
-            appendLine("Ril $versi · mode ${setelan.mode}")
+            appendLine("Ril $versi · ${labelPilihan()} · sekarang ${setelan.mode}")
             appendLine("Device owner: ${if (Kebijakan.pemilik(this@MainActivity)) "ya" else "BELUM"}")
             appendLine("Terkunci: ${if (am.lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE) "ya" else "tidak"}")
             appendLine("Tailscale terpasang: ${if (Kebijakan.terpasang(this@MainActivity, Setelan.PAKET_TAILSCALE)) "ya" else "TIDAK"}")

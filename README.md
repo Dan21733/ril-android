@@ -1,20 +1,29 @@
 # Ril: aplikasi kiosk tablet toko
 
-Satu aplikasi untuk semua tablet toko. Tiap tablet diatur jadi **Gudang** atau **Kasir**.
+Satu aplikasi untuk semua tablet toko. Tiap tablet diatur (menu pemilik › *Mode tablet*) jadi
+**Kasir & Gudang**, **Kasir saja**, atau **Gudang saja**. Kalau keduanya, bilah atas berisi tab
+*Kasir | Gudang* dan karyawan bisa pindah sendiri tanpa PIN pemilik.
 Ril jadi layar utama dan satu-satunya aplikasi yang bisa dibuka (selain Tailscale).
+
+**Gudang selalu minta PIN.** Setiap kali pindah ke Gudang (dan saat aplikasi dibuka), sesi gudang
+sebelumnya ditutup, jadi orang yang meminjam tablet tidak bisa memakai akun karyawan lain.
+Tombol kembali tidak mundur ke halaman masuk atau ke mode lain.
+
+Tablet dua mode butuh akses Tailscale ke kasir (port 443) **dan** gudang (port 8443), dan
+tabletnya didaftarkan di master sebagai tablet kasir dan perangkat gudang.
 
 Sebagai *device owner*, Ril mematikan: transfer file USB, opsi pengembang/USB debugging,
 pasang APK dari luar, reset pabrik, safe mode, kartu SD, tambah pengguna. Tailscale dipaksa
 selalu menyala. Aplikasi lain bisa disembunyikan (tidak jalan sama sekali) dari menu pemilik.
 
 **Menu pemilik:** ketuk pojok kanan atas layar 5 kali dalam 3 detik, lalu masukkan PIN pemilik.
-Isinya: muat ulang, Wi-Fi, buka Tailscale, ganti mode, ubah alamat, sembunyikan aplikasi,
+Isinya: muat ulang, Wi-Fi, buka Tailscale, mode tablet, ubah alamat, sembunyikan aplikasi,
 ganti PIN, status, mode perawatan (buka kunci sementara), dan lepas Ril.
 
 ## Build
 
-APK dibangun GitHub Actions (`.github/workflows/ril-android.yml`) setiap ada perubahan di
-`android/`. Unduh dari tab **Actions › Ril Android › run terakhir › Artifacts**.
+APK dibangun GitHub Actions (`.github/workflows/ril-android.yml`) setiap push.
+Unduh dari tab **Actions › Ril Android › run terakhir › Artifacts**.
 Butuh secret `RIL_KEYSTORE_B64` dan `RIL_KEYSTORE_PASSWORD` (lihat komentar di workflow).
 Selalu kunci yang sama: tablet hanya menerima update dengan tanda tangan yang sama.
 
@@ -37,7 +46,7 @@ Butuh PC Windows dengan **Android platform-tools** (`adb`) dan kabel USB data.
    ```
    Harus keluar `Success`. Kalau gagal "already some accounts", ada akun yang belum
    dihapus: hapus di Pengaturan › Akun, atau ulangi reset.
-7. Buka Ril, **buat PIN pemilik**, lalu lewat menu pemilik pilih mode (Gudang/Kasir).
+7. Buka Ril, **buat PIN pemilik**, lalu lewat menu pemilik pilih mode tablet.
 8. Halaman gudang/kasir menampilkan kode perangkat: setujui di master
    (Kasir › Perangkat operasional) seperti biasa.
 9. Lewat menu pemilik › *Sembunyikan aplikasi*: sembunyikan yang tidak perlu (satu per satu,

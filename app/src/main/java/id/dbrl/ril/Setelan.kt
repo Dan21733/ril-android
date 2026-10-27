@@ -8,8 +8,16 @@ import java.security.SecureRandom
 class Setelan(context: Context) {
     private val sp = context.getSharedPreferences("ril", Context.MODE_PRIVATE)
 
+    /** Mode yang boleh dipakai di tablet ini: keduanya (bisa pindah sendiri), kasir saja, atau gudang saja. */
+    var pilihanMode: String
+        get() = sp.getString("pilihan_mode", PILIHAN_KEDUANYA) ?: PILIHAN_KEDUANYA
+        set(v) = sp.edit().putString("pilihan_mode", v).apply()
+
+    val bisaPindah: Boolean get() = pilihanMode == PILIHAN_KEDUANYA
+
+    /** Mode yang sedang tampil. Kalau tablet dikunci ke satu mode, selalu mode itu. */
     var mode: String
-        get() = sp.getString("mode", MODE_GUDANG) ?: MODE_GUDANG
+        get() = if (bisaPindah) sp.getString("mode", MODE_GUDANG) ?: MODE_GUDANG else pilihanMode
         set(v) = sp.edit().putString("mode", v).apply()
 
     var alamatGudang: String
@@ -47,6 +55,7 @@ class Setelan(context: Context) {
     companion object {
         const val MODE_GUDANG = "gudang"
         const val MODE_KASIR = "kasir"
+        const val PILIHAN_KEDUANYA = "keduanya"
         const val ALAMAT_GUDANG = "https://server-rumah.tail8bf945.ts.net:8443/gudang/"
         const val ALAMAT_KASIR = "https://server-rumah.tail8bf945.ts.net/"
         const val PAKET_TAILSCALE = "com.tailscale.ipn"
