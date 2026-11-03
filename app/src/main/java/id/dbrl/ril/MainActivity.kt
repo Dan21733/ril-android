@@ -3,12 +3,14 @@ package id.dbrl.ril
 import android.app.Activity
 import android.app.ActivityManager
 import android.app.AlertDialog
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
+import android.provider.MediaStore
 import android.provider.Settings
 import android.text.InputType
 import android.view.Gravity
@@ -58,6 +60,8 @@ class MainActivity : Activity() {
     private var salahPin = 0
     private var terkunciSampai = 0L
     private var unggahan: ValueCallback<Array<Uri>>? = null
+    private var fotoKamera: java.io.File? = null
+    private var fotoKameraUri: Uri? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -237,12 +241,39 @@ class MainActivity : Activity() {
             override fun onShowFileChooser(view: WebView, cb: ValueCallback<Array<Uri>>, p: FileChooserParams): Boolean {
                 unggahan?.onReceiveValue(null)
                 unggahan = cb
+                // <input capture> (tombol "Ambil foto" bukti transfer): buka kamera langsung.
+                // Dulu semua input berkas membuka pemilih berkas, jadi tombol kamera ikut membuka Files.
+                if (p.isCaptureEnabled && bukaKamera()) return true
                 return try {
                     startActivityForResult(p.createIntent(), PILIH_BERKAS); true
                 } catch (e: Exception) {
                     unggahan = null; false
                 }
             }
+        }
+    }
+
+    /** Kamera menulis ke berkas Ril sendiri (FotoProvider). Gagal (tidak ada kamera) = pemilih berkas. */
+    private fun bukaKamera(): Boolean {
+        val (f, uri) = try { FotoProvider.baru(this) } catch (e: Exception) { return false }
+        val i = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
+            putExtra(MediaStore.EXTRA_OUTPUT, uri)
+            clipData = ClipData.newRawUri("bukti", uri)
+            addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        if (i.resolveActivity(packageManager) == null) {
+            pesan("Aplikasi kamera tidak ditemukan (mungkin disembunyikan di menu pemilik). Pilih foto dari berkas.")
+            f.delete()
+            return false
+        }
+        return try {
+            fotoKamera = f
+            fotoKameraUri = uri
+            startActivityForResult(i, AMBIL_FOTO)
+            true
+        } catch (e: Exception) {
+            fotoKamera = null; fotoKameraUri = null; f.delete()
+            false
         }
     }
 
@@ -256,6 +287,15 @@ class MainActivity : Activity() {
         if (requestCode == PILIH_BERKAS) {
             unggahan?.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode, data))
             unggahan = null
+            return
+        }
+        if (requestCode == AMBIL_FOTO) {
+            val f = fotoKamera
+            val uri = fotoKameraUri
+            val ada = resultCode == Activity.RESULT_OK && f != null && uri != null && f.length() > 0
+            unggahan?.onReceiveValue(if (ada) arrayOf(uri!!) else null)
+            if (!ada) f?.delete()
+            unggahan = null; fotoKamera = null; fotoKameraUri = null
             return
         }
         super.onActivityResult(requestCode, resultCode, data)
@@ -458,5 +498,6 @@ class MainActivity : Activity() {
 
     companion object {
         private const val PILIH_BERKAS = 7
+        private const val AMBIL_FOTO = 8
     }
 }

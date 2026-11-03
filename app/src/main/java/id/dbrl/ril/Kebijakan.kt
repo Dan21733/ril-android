@@ -9,6 +9,7 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.UserManager
+import android.provider.MediaStore
 
 /**
  * Kebijakan device owner. Hanya berlaku kalau Ril sudah dijadikan device owner.
@@ -51,7 +52,9 @@ object Kebijakan {
 
         val boleh = mutableListOf(c.packageName)
         if (terpasang(c, Setelan.PAKET_TAILSCALE)) boleh += Setelan.PAKET_TAILSCALE
-        d.setLockTaskPackages(a, boleh.toTypedArray())
+        // Aplikasi kamera boleh dibuka dari dalam Ril (foto bukti transfer), tidak dari layar lain.
+        boleh += paketKamera(c)
+        d.setLockTaskPackages(a, boleh.distinct().toTypedArray())
         if (Build.VERSION.SDK_INT >= 28) {
             // Status bar hanya menampilkan jam, baterai, dan sinyal; notifikasi dan panel cepat terkunci.
             d.setLockTaskFeatures(a, DevicePolicyManager.LOCK_TASK_FEATURE_SYSTEM_INFO)
@@ -116,6 +119,12 @@ object Kebijakan {
             }
             .sortedBy { it.nama.lowercase() }
     }
+
+    /** Paket aplikasi yang bisa memotret untuk aplikasi lain (ACTION_IMAGE_CAPTURE). */
+    @Suppress("DEPRECATION")
+    fun paketKamera(c: Context): List<String> =
+        c.packageManager.queryIntentActivities(Intent(MediaStore.ACTION_IMAGE_CAPTURE), 0)
+            .map { it.activityInfo.packageName }.distinct()
 
     fun sembunyikan(c: Context, paket: String, sembunyi: Boolean): Boolean {
         if (!pemilik(c)) return false
