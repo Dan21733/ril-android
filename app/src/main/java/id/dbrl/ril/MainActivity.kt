@@ -47,6 +47,7 @@ class MainActivity : Activity() {
     private lateinit var bilah: LinearLayout
     private lateinit var tabKasir: TextView
     private lateinit var tabGudang: TextView
+    private lateinit var tabSiapkan: TextView
 
     /** Halaman gudang berikutnya yang selesai dimuat harus berakhir di halaman masuk (PIN). */
     private var wajibKeluarGudang = true
@@ -110,8 +111,13 @@ class MainActivity : Activity() {
         }
         tabKasir = buatTab("Kasir") { gantiKe(Setelan.MODE_KASIR) }
         tabGudang = buatTab("Gudang") { gantiKe(Setelan.MODE_GUDANG) }
+        tabSiapkan = buatTab("Siapkan") { gantiKe(Setelan.MODE_SIAPKAN) }
         bilah.addView(tabKasir)
         bilah.addView(tabGudang)
+        bilah.addView(tabSiapkan)
+        bilah.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        // Pengaturan yang boleh diatur karyawan sendiri (warna, layar mati). Printer dll. di menu pemilik.
+        bilah.addView(buatTab("Pengaturan") { pengaturanKaryawan() })
         kolom.addView(bilah, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
 
         val isi = FrameLayout(this)
@@ -155,8 +161,8 @@ class MainActivity : Activity() {
     }
 
     private fun perbaruiBilah() {
-        bilah.visibility = if (setelan.bisaPindah) View.VISIBLE else View.GONE
-        for ((tab, m) in listOf(tabKasir to Setelan.MODE_KASIR, tabGudang to Setelan.MODE_GUDANG)) {
+        for ((tab, m) in listOf(tabKasir to Setelan.MODE_KASIR, tabGudang to Setelan.MODE_GUDANG, tabSiapkan to Setelan.MODE_SIAPKAN)) {
+            tab.visibility = if (m in setelan.modeBoleh) View.VISIBLE else View.GONE
             val aktif = setelan.mode == m
             tab.setTextColor(Color.parseColor(if (aktif) "#FFFFFF" else "#A8A29A"))
             tab.setTypeface(null, if (aktif) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
@@ -166,7 +172,7 @@ class MainActivity : Activity() {
 
     /** Pindah mode. Keluar dari Gudang = sesi gudang ditutup, jadi masuk lagi wajib PIN. */
     private fun gantiKe(baru: String) {
-        if (baru == setelan.mode) return
+        if (baru == setelan.mode || baru !in setelan.modeBoleh) return
         val dariGudang = setelan.mode == Setelan.MODE_GUDANG
         setelan.mode = baru
         perbaruiBilah()
@@ -400,8 +406,6 @@ class MainActivity : Activity() {
             "Buka Tailscale" to { bukaTailscale() },
             "Mode tablet: ${labelPilihan()} (ganti)" to { gantiMode() },
             "Printer: ${setelan.printer.ifEmpty { "belum ada" }} (cari / ubah)" to { menuPrinter() },
-            "Warna tablet: ${(Setelan.TEMA.firstOrNull { it.kunci == setelan.tema } ?: Setelan.TEMA[0]).nama}" to { pilihTema() },
-            "Layar mati: ${if (setelan.layarMati == 0) "tidak pernah" else "${setelan.layarMati} menit"}${if (setelan.nyalaSaatCas) ", nyala saat dicas" else ""}" to { aturLayar() },
             "Ubah alamat server" to { ubahAlamat() },
             "Sembunyikan / munculkan aplikasi" to { aturAplikasi() },
             "Ganti PIN pemilik" to { mintaPinBaru(wajib = false) },
@@ -429,14 +433,14 @@ class MainActivity : Activity() {
     }
 
     private fun labelPilihan() = when (setelan.pilihanMode) {
-        Setelan.MODE_KASIR -> "Kasir saja"
+        Setelan.MODE_KASIR -> "Kasir (+ Siapkan)"
         Setelan.MODE_GUDANG -> "Gudang saja"
         else -> "Kasir & Gudang"
     }
 
     private fun gantiMode() {
         val nilai = arrayOf(Setelan.PILIHAN_KEDUANYA, Setelan.MODE_KASIR, Setelan.MODE_GUDANG)
-        val nama = arrayOf("Kasir & Gudang (karyawan bisa pindah di bilah atas)", "Kasir saja", "Gudang saja")
+        val nama = arrayOf("Kasir, Gudang & Siapkan (karyawan bisa pindah di bilah atas)", "Kasir & Siapkan", "Gudang saja")
         val kini = nilai.indexOf(setelan.pilihanMode).coerceAtLeast(0)
         AlertDialog.Builder(this).setTitle("Mode tablet ini").setSingleChoiceItems(nama, kini) { d, i ->
             d.dismiss()
@@ -445,6 +449,16 @@ class MainActivity : Activity() {
             perbaruiBilah()
             if (dariGudang && setelan.mode != Setelan.MODE_GUDANG) keluarGudang { bukaMode() } else bukaMode()
         }.show()
+    }
+
+    /** Tab "Pengaturan": tanpa PIN, hanya hal tampilan tablet. */
+    private fun pengaturanKaryawan() {
+        val warna = (Setelan.TEMA.firstOrNull { it.kunci == setelan.tema } ?: Setelan.TEMA[0]).nama
+        val layar = if (setelan.layarMati == 0) "selalu nyala" else "mati setelah ${setelan.layarMati} menit"
+        val pilihan = arrayOf("Warna tablet: $warna", "Layar: $layar${if (setelan.nyalaSaatCas) ", nyala saat dicas" else ""}")
+        AlertDialog.Builder(this).setTitle("Pengaturan tablet")
+            .setItems(pilihan) { _, i -> if (i == 0) pilihTema() else aturLayar() }
+            .setNegativeButton("Tutup", null).show()
     }
 
     private fun menuPrinter() {

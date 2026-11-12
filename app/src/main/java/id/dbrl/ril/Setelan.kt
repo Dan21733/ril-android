@@ -15,9 +15,19 @@ class Setelan(context: Context) {
 
     val bisaPindah: Boolean get() = pilihanMode == PILIHAN_KEDUANYA
 
-    /** Mode yang sedang tampil. Kalau tablet dikunci ke satu mode, selalu mode itu. */
+    /** Mode yang boleh dibuka di tablet ini (urutan tab bilah atas). Siapkan ikut kasir. */
+    val modeBoleh: List<String> get() = when (pilihanMode) {
+        MODE_KASIR -> listOf(MODE_KASIR, MODE_SIAPKAN)
+        MODE_GUDANG -> listOf(MODE_GUDANG)
+        else -> listOf(MODE_KASIR, MODE_GUDANG, MODE_SIAPKAN)
+    }
+
+    /** Mode yang sedang tampil, selalu salah satu dari modeBoleh. */
     var mode: String
-        get() = if (bisaPindah) sp.getString("mode", MODE_GUDANG) ?: MODE_GUDANG else pilihanMode
+        get() {
+            val m = sp.getString("mode", null)
+            return if (m != null && m in modeBoleh) m else modeBoleh.first()
+        }
         set(v) = sp.edit().putString("mode", v).apply()
 
     var alamatGudang: String
@@ -28,7 +38,17 @@ class Setelan(context: Context) {
         get() = sp.getString("alamat_kasir", ALAMAT_KASIR) ?: ALAMAT_KASIR
         set(v) = sp.edit().putString("alamat_kasir", v.trim()).apply()
 
-    val alamat: String get() = if (mode == MODE_KASIR) alamatKasir else alamatGudang
+    /** Halaman Siapkan ada di server gudang (tanpa login, PIN per aksi). */
+    val alamatSiapkan: String get() {
+        val u = android.net.Uri.parse(alamatGudang)
+        return "${u.scheme}://${u.authority}/gudang/siapkan/"
+    }
+
+    val alamat: String get() = when (mode) {
+        MODE_KASIR -> alamatKasir
+        MODE_SIAPKAN -> alamatSiapkan
+        else -> alamatGudang
+    }
 
     /** Printer struk (host:port) hasil cari atau isian pemilik. Kosong = cari otomatis saat cetak. */
     var printer: String
@@ -90,6 +110,7 @@ class Setelan(context: Context) {
 
         const val MODE_GUDANG = "gudang"
         const val MODE_KASIR = "kasir"
+        const val MODE_SIAPKAN = "siapkan"
         const val PILIHAN_KEDUANYA = "keduanya"
         const val ALAMAT_GUDANG = "https://server-rumah.tail8bf945.ts.net:8443/gudang/"
         const val ALAMAT_KASIR = "https://server-rumah.tail8bf945.ts.net/"
