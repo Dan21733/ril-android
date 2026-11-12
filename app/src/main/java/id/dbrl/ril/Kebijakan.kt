@@ -130,4 +130,21 @@ object Kebijakan {
         if (!pemilik(c)) return false
         return dpm(c).setApplicationHidden(admin(c), paket, sembunyi)
     }
+
+    /**
+     * Layar mati otomatis (hemat baterai): batas waktu layar dan "tetap nyala saat dicas".
+     * Hanya device owner, Android 9+. Keyguard tetap mati, jadi bangun langsung ke Ril.
+     */
+    fun aturLayar(c: Context, menit: Int, nyalaSaatCas: Boolean) {
+        if (!pemilik(c) || Build.VERSION.SDK_INT < 28) return
+        val d = dpm(c)
+        val a = admin(c)
+        try {
+            if (menit > 0) d.setSystemSetting(a, android.provider.Settings.System.SCREEN_OFF_TIMEOUT, (menit * 60_000).toString())
+            d.setGlobalSetting(a, android.provider.Settings.Global.STAY_ON_WHILE_PLUGGED_IN,
+                if (nyalaSaatCas) (android.os.BatteryManager.BATTERY_PLUGGED_AC or android.os.BatteryManager.BATTERY_PLUGGED_USB or
+                    android.os.BatteryManager.BATTERY_PLUGGED_WIRELESS).toString() else "0")
+        } catch (e: Exception) {
+        }
+    }
 }

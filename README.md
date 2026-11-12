@@ -17,8 +17,15 @@ pasang APK dari luar, reset pabrik, safe mode, kartu SD, tambah pengguna. Tailsc
 selalu menyala. Aplikasi lain bisa disembunyikan (tidak jalan sama sekali) dari menu pemilik.
 
 **Menu pemilik:** ketuk pojok kanan atas layar 5 kali dalam 3 detik, lalu masukkan PIN pemilik.
-Isinya: muat ulang, Wi-Fi, buka Tailscale, mode tablet, ubah alamat, sembunyikan aplikasi,
-ganti PIN, status, mode perawatan (buka kunci sementara), dan lepas Ril.
+Isinya: muat ulang, Wi-Fi, buka Tailscale, mode tablet, **printer** (cari otomatis / isi manual /
+halaman uji), **warna tablet** (8 pilihan), **layar mati** (1/2/5/10 menit atau selalu nyala,
+tetap nyala saat dicas), ubah alamat, sembunyikan aplikasi, ganti PIN, status, mode perawatan
+(buka kunci sementara), dan lepas Ril.
+
+**Cetak langsung (12 Nov 2026):** halaman kasir di dalam Ril mengirim struk lewat Ril langsung ke
+printer LAN (port 9100), tanpa penghubung cetak di laptop. Kalau printer tidak menjawab (pindah IP),
+Ril memindai Wi-Fi toko dan memakai printer Epson yang ditemukan. Paling aman: kunci IP printer di
+router (reservasi DHCP). Di luar Ril (browser biasa) kasir tetap memakai penghubung cetak.
 
 ## Build
 

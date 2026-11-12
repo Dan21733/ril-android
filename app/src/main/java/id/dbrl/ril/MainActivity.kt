@@ -40,6 +40,7 @@ import android.widget.Toast
  */
 class MainActivity : Activity() {
     private lateinit var setelan: Setelan
+    private lateinit var jembatan: JembatanRil
     private lateinit var web: WebView
     private lateinit var galat: LinearLayout
     private lateinit var galatTeks: TextView
@@ -66,7 +67,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setelan = Setelan(this)
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        terapkanLayar()
         setContentView(bangunLayar())
         siapkanWeb()
         perbaruiBilah()
@@ -159,7 +160,7 @@ class MainActivity : Activity() {
             val aktif = setelan.mode == m
             tab.setTextColor(Color.parseColor(if (aktif) "#FFFFFF" else "#A8A29A"))
             tab.setTypeface(null, if (aktif) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
-            tab.setBackgroundColor(Color.parseColor(if (aktif) "#C2571A" else "#2A2724"))
+            tab.setBackgroundColor(Color.parseColor(if (aktif) setelan.warnaTema else "#2A2724"))
         }
     }
 
@@ -196,6 +197,21 @@ class MainActivity : Activity() {
         }
     }
 
+    /** Halaman kasir milik toko (host + port sama dengan alamat kasir): hanya di sini cetak boleh. */
+    private fun halamanKasir(url: String?): Boolean {
+        if (url == null) return false
+        val u = Uri.parse(url)
+        val k = Uri.parse(setelan.alamatKasir)
+        return u.scheme == "https" && u.host == k.host && u.port == k.port
+    }
+
+    /** Layar mati otomatis: 0 menit = selalu nyala (cara lama). */
+    private fun terapkanLayar() {
+        if (setelan.layarMati == 0) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        Kebijakan.aturLayar(this, setelan.layarMati, setelan.nyalaSaatCas)
+    }
+
     private fun halamanMasuk(url: String?) = url != null && (url.contains("/masuk") || url.contains("/login"))
 
     private fun siapkanWeb() {
@@ -212,6 +228,8 @@ class MainActivity : Activity() {
             setSupportMultipleWindows(false)
             builtInZoomControls = false
         }
+        jembatan = JembatanRil(applicationContext, setelan, web)
+        web.addJavascriptInterface(jembatan, "RilTablet")
         web.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, req: WebResourceRequest): Boolean {
                 // Hanya server toko yang boleh dibuka; tautan lain diabaikan.
@@ -226,7 +244,12 @@ class MainActivity : Activity() {
                 tampilGalat()
             }
 
+            override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) {
+                jembatan.boleh = halamanKasir(url)
+            }
+
             override fun onPageFinished(view: WebView, url: String?) {
+                jembatan.boleh = halamanKasir(url)
                 if (bersihkanRiwayat) { bersihkanRiwayat = false; view.clearHistory() }
                 val diGudang = url != null && Uri.parse(url).port == Uri.parse(setelan.alamatGudang).port &&
                     Uri.parse(url).host == Uri.parse(setelan.alamatGudang).host
@@ -376,6 +399,9 @@ class MainActivity : Activity() {
             "Wi-Fi" to { bukaPengaturan(Settings.ACTION_WIFI_SETTINGS) },
             "Buka Tailscale" to { bukaTailscale() },
             "Mode tablet: ${labelPilihan()} (ganti)" to { gantiMode() },
+            "Printer: ${setelan.printer.ifEmpty { "belum ada" }} (cari / ubah)" to { menuPrinter() },
+            "Warna tablet: ${(Setelan.TEMA.firstOrNull { it.kunci == setelan.tema } ?: Setelan.TEMA[0]).nama}" to { pilihTema() },
+            "Layar mati: ${if (setelan.layarMati == 0) "tidak pernah" else "${setelan.layarMati} menit"}${if (setelan.nyalaSaatCas) ", nyala saat dicas" else ""}" to { aturLayar() },
             "Ubah alamat server" to { ubahAlamat() },
             "Sembunyikan / munculkan aplikasi" to { aturAplikasi() },
             "Ganti PIN pemilik" to { mintaPinBaru(wajib = false) },
@@ -419,6 +445,85 @@ class MainActivity : Activity() {
             perbaruiBilah()
             if (dariGudang && setelan.mode != Setelan.MODE_GUDANG) keluarGudang { bukaMode() } else bukaMode()
         }.show()
+    }
+
+    private fun menuPrinter() {
+        val pilihan = arrayOf("Cari printer otomatis", "Isi alamat manual", "Cetak halaman uji")
+        AlertDialog.Builder(this).setTitle("Printer: ${setelan.printer.ifEmpty { "belum ada" }}")
+            .setItems(pilihan) { _, i ->
+                when (i) {
+                    0 -> cariPrinter()
+                    1 -> isiPrinter()
+                    else -> cetakUji()
+                }
+            }.setNegativeButton("Tutup", null).show()
+    }
+
+    private fun cariPrinter() {
+        pesan("Mencari printer di Wi-Fi toko…")
+        Thread {
+            val h = Printer.cari(applicationContext)
+            runOnUiThread {
+                if (h.alamat.isNotEmpty()) {
+                    setelan.printer = h.alamat
+                    pesan("Printer ditemukan: ${h.alamat}${if (h.model.isNotEmpty()) " (${h.model})" else ""}")
+                } else if (h.semua.size > 1) {
+                    val daftar = h.semua.map { "$it:${Printer.PORT}" }.toTypedArray()
+                    AlertDialog.Builder(this).setTitle("Pilih printer kasir").setItems(daftar) { _, i ->
+                        setelan.printer = daftar[i]; pesan("Printer: ${daftar[i]}. Coba cetak halaman uji.")
+                    }.setNegativeButton("Batal", null).show()
+                } else pesan(h.pesan)
+            }
+        }.start()
+    }
+
+    private fun isiPrinter() {
+        val isian = EditText(this).apply {
+            setText(setelan.printer); hint = "192.168.1.224:9100"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+        }
+        AlertDialog.Builder(this).setTitle("Alamat printer").setView(isian)
+            .setPositiveButton("Simpan") { _, _ -> setelan.printer = isian.text.toString(); pesan("Tersimpan.") }
+            .setNegativeButton("Batal", null).show()
+    }
+
+    private fun cetakUji() {
+        val alamat = setelan.printer
+        if (alamat.isEmpty()) { pesan("Cari printer dulu."); return }
+        val uji = "\u001B@Ril: halaman uji\n${android.os.Build.MODEL}\nPrinter $alamat\n\n\n\n\u001DV\u0001"
+        Thread {
+            val ok = runCatching { Printer.kirim(Printer.wifi(applicationContext), alamat, uji.toByteArray(Charsets.ISO_8859_1)) }.isSuccess
+            runOnUiThread { pesan(if (ok) "Halaman uji dikirim ke $alamat." else "Printer $alamat tidak bisa dihubungi.") }
+        }.start()
+    }
+
+    private fun pilihTema() {
+        val kini = Setelan.TEMA.indexOfFirst { it.kunci == setelan.tema }.coerceAtLeast(0)
+        AlertDialog.Builder(this).setTitle("Warna tablet ini")
+            .setSingleChoiceItems(Setelan.TEMA.map { it.nama }.toTypedArray(), kini) { d, i ->
+                d.dismiss()
+                setelan.tema = Setelan.TEMA[i].kunci
+                perbaruiBilah()
+                web.evaluateJavascript("document.documentElement.dataset.warna='${setelan.tema}'", null)
+                pesan("Warna: ${Setelan.TEMA[i].nama}")
+            }.show()
+    }
+
+    private fun aturLayar() {
+        val menit = intArrayOf(1, 2, 5, 10, 0)
+        val nama = arrayOf("1 menit", "2 menit", "5 menit", "10 menit", "Tidak pernah (selalu nyala)")
+        val kini = menit.indexOf(setelan.layarMati).coerceAtLeast(0)
+        AlertDialog.Builder(this).setTitle("Layar mati setelah tidak disentuh")
+            .setSingleChoiceItems(nama, kini) { d, i ->
+                d.dismiss()
+                setelan.layarMati = menit[i]
+                AlertDialog.Builder(this).setTitle("Saat dicas")
+                    .setItems(arrayOf("Tetap nyala saat dicas", "Ikut mati juga")) { _, j ->
+                        setelan.nyalaSaatCas = j == 0
+                        terapkanLayar()
+                        pesan(if (Kebijakan.pemilik(this) || menit[i] == 0) "Tersimpan." else "Tersimpan. Batas waktu layar hanya berlaku kalau Ril device owner.")
+                    }.show()
+            }.show()
     }
 
     private fun ubahAlamat() {

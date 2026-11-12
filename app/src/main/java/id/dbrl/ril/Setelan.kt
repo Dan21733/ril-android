@@ -30,6 +30,27 @@ class Setelan(context: Context) {
 
     val alamat: String get() = if (mode == MODE_KASIR) alamatKasir else alamatGudang
 
+    /** Printer struk (host:port) hasil cari atau isian pemilik. Kosong = cari otomatis saat cetak. */
+    var printer: String
+        get() = sp.getString("printer", "") ?: ""
+        set(v) = sp.edit().putString("printer", v.trim()).apply()
+
+    /** Warna tablet (lihat TEMA); halaman kasir membacanya lewat RilTablet.tema(). */
+    var tema: String
+        get() = sp.getString("tema", TEMA[0].kunci) ?: TEMA[0].kunci
+        set(v) = sp.edit().putString("tema", v).apply()
+
+    val warnaTema: String get() = (TEMA.firstOrNull { it.kunci == tema } ?: TEMA[0]).warna
+
+    /** Layar mati setelah N menit tidak disentuh; 0 = selalu nyala. */
+    var layarMati: Int
+        get() = sp.getInt("layar_mati", 2)
+        set(v) = sp.edit().putInt("layar_mati", v).apply()
+
+    var nyalaSaatCas: Boolean
+        get() = sp.getBoolean("nyala_cas", true)
+        set(v) = sp.edit().putBoolean("nyala_cas", v).apply()
+
     val punyaPin: Boolean get() = sp.contains("pin_hash")
 
     fun simpanPin(pin: String) {
@@ -52,7 +73,21 @@ class Setelan(context: Context) {
 
     private fun ByteArray.hex() = joinToString("") { "%02x".format(it) }
 
+    data class Tema(val kunci: String, val nama: String, val warna: String)
+
     companion object {
+        /** 8 warna tablet; versi gelapnya diatur di CSS kasir (data-warna). Warna bilah = versi terang. */
+        val TEMA = listOf(
+            Tema("toska", "Toska", "#0F766E"),
+            Tema("biru", "Biru", "#1D6FD6"),
+            Tema("navy", "Biru tua", "#1E3A8A"),
+            Tema("ungu", "Ungu", "#6D28D9"),
+            Tema("pink", "Pink", "#C2185B"),
+            Tema("jingga", "Jingga", "#C2410C"),
+            Tema("cokelat", "Cokelat", "#8A5A3B"),
+            Tema("abu", "Abu", "#475569"),
+        )
+
         const val MODE_GUDANG = "gudang"
         const val MODE_KASIR = "kasir"
         const val PILIHAN_KEDUANYA = "keduanya"
