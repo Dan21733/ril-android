@@ -26,9 +26,11 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 
@@ -216,6 +218,21 @@ class MainActivity : Activity() {
         if (setelan.layarMati == 0) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         Kebijakan.aturLayar(this, setelan.layarMati, setelan.nyalaSaatCas)
+        terapkanKecerahan()
+    }
+
+    /**
+     * Kecerahan pilihan karyawan. Di tempat agak gelap kecerahan otomatis membuat layar terlalu redup untuk
+     * karyawan yang lebih tua, jadi bisa dikunci manual. Diterapkan ke seluruh tablet (device owner) dan ke
+     * jendela Ril sendiri (berlaku walau bukan device owner).
+     */
+    private fun terapkanKecerahan(persen: Int = setelan.kecerahan, simpanSistem: Boolean = true) {
+        if (persen == Setelan.KECERAHAN_BELUM) return
+        window.attributes = window.attributes.apply {
+            screenBrightness = if (persen == Setelan.KECERAHAN_OTOMATIS) WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+            else persen.coerceIn(5, 100) / 100f
+        }
+        if (simpanSistem) Kebijakan.aturKecerahan(this, persen)
     }
 
     private fun halamanMasuk(url: String?) = url != null && (url.contains("/masuk") || url.contains("/login"))
@@ -455,9 +472,14 @@ class MainActivity : Activity() {
     private fun pengaturanKaryawan() {
         val warna = (Setelan.TEMA.firstOrNull { it.kunci == setelan.tema } ?: Setelan.TEMA[0]).nama
         val layar = if (setelan.layarMati == 0) "selalu nyala" else "mati setelah ${setelan.layarMati} menit"
-        val pilihan = arrayOf("Warna tablet: $warna", "Layar: $layar${if (setelan.nyalaSaatCas) ", nyala saat dicas" else ""}")
+        val terang = when (setelan.kecerahan) {
+            Setelan.KECERAHAN_OTOMATIS, Setelan.KECERAHAN_BELUM -> "otomatis"
+            else -> "${setelan.kecerahan}%"
+        }
+        val pilihan = arrayOf("Warna tablet: $warna", "Layar: $layar${if (setelan.nyalaSaatCas) ", nyala saat dicas" else ""}",
+            "Kecerahan: $terang")
         AlertDialog.Builder(this).setTitle("Pengaturan tablet")
-            .setItems(pilihan) { _, i -> if (i == 0) pilihTema() else aturLayar() }
+            .setItems(pilihan) { _, i -> when (i) { 0 -> pilihTema(); 1 -> aturLayar(); else -> aturKecerahan() } }
             .setNegativeButton("Tutup", null).show()
     }
 
@@ -538,6 +560,46 @@ class MainActivity : Activity() {
                         pesan(if (Kebijakan.pemilik(this) || menit[i] == 0) "Tersimpan." else "Tersimpan. Batas waktu layar hanya berlaku kalau Ril device owner.")
                     }.show()
             }.show()
+    }
+
+    /** Penggeser kecerahan + "Otomatis". Layar langsung berubah saat digeser; Batal mengembalikan. */
+    private fun aturKecerahan() {
+        val awal = setelan.kecerahan
+        val mulai = if (awal >= 5) awal else 80
+        val label = TextView(this).apply { textSize = 18f; setPadding(0, dp(4), 0, dp(8)) }
+        val geser = SeekBar(this).apply { max = 95; progress = mulai - 5 }
+        val otomatis = CheckBox(this).apply {
+            text = "Otomatis (ikut terang ruangan)"; textSize = 17f
+            isChecked = awal == Setelan.KECERAHAN_OTOMATIS || awal == Setelan.KECERAHAN_BELUM
+        }
+        fun tampil() {
+            val p = geser.progress + 5
+            geser.isEnabled = !otomatis.isChecked
+            label.text = if (otomatis.isChecked) "Otomatis: bisa jadi redup di tempat gelap." else "Kecerahan: $p%"
+            terapkanKecerahan(if (otomatis.isChecked) Setelan.KECERAHAN_OTOMATIS else p, simpanSistem = false)
+        }
+        geser.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(s: SeekBar, v: Int, dariPengguna: Boolean) = tampil()
+            override fun onStartTrackingTouch(s: SeekBar) {}
+            override fun onStopTrackingTouch(s: SeekBar) {}
+        })
+        otomatis.setOnCheckedChangeListener { _, _ -> tampil() }
+        val isi = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(8), dp(24), 0)
+            addView(label); addView(geser); addView(otomatis)
+        }
+        tampil()
+        AlertDialog.Builder(this).setTitle("Kecerahan layar").setView(isi)
+            .setPositiveButton("Simpan") { _, _ ->
+                setelan.kecerahan = if (otomatis.isChecked) Setelan.KECERAHAN_OTOMATIS else geser.progress + 5
+                terapkanKecerahan()
+                pesan(if (Kebijakan.pemilik(this)) "Tersimpan." else "Tersimpan untuk Ril saja (bukan device owner).")
+            }
+            .setNegativeButton("Batal") { _, _ ->
+                if (awal == Setelan.KECERAHAN_BELUM) terapkanKecerahan(Setelan.KECERAHAN_OTOMATIS, simpanSistem = false)
+                else terapkanKecerahan(awal, simpanSistem = false)
+            }
+            .setCancelable(false).show()
     }
 
     private fun ubahAlamat() {

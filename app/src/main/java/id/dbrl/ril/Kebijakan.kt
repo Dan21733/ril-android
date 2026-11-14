@@ -147,4 +147,29 @@ object Kebijakan {
         } catch (e: Exception) {
         }
     }
+
+    /**
+     * Kecerahan untuk seluruh tablet (device owner, Android 9+). persen = Setelan.KECERAHAN_OTOMATIS untuk
+     * kecerahan otomatis. Mengembalikan false kalau tidak bisa (bukan device owner / ditolak sistem); jendela Ril
+     * tetap diatur terpisah di MainActivity supaya Ril sendiri selalu terbaca.
+     */
+    fun aturKecerahan(c: Context, persen: Int): Boolean {
+        if (!pemilik(c) || Build.VERSION.SDK_INT < 28) return false
+        val d = dpm(c)
+        val a = admin(c)
+        return try {
+            if (persen == Setelan.KECERAHAN_OTOMATIS) {
+                d.setSystemSetting(a, android.provider.Settings.System.SCREEN_BRIGHTNESS_MODE,
+                    android.provider.Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC.toString())
+            } else {
+                d.setSystemSetting(a, android.provider.Settings.System.SCREEN_BRIGHTNESS_MODE,
+                    android.provider.Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL.toString())
+                d.setSystemSetting(a, android.provider.Settings.System.SCREEN_BRIGHTNESS,
+                    (persen.coerceIn(5, 100) * 255 / 100).toString())
+            }
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
 }

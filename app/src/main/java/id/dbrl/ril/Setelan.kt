@@ -67,6 +67,11 @@ class Setelan(context: Context) {
         get() = sp.getInt("layar_mati", 2)
         set(v) = sp.edit().putInt("layar_mati", v).apply()
 
+    /** Kecerahan layar dalam persen (5-100), OTOMATIS = ikut cahaya ruangan, BELUM = tidak diubah Ril. */
+    var kecerahan: Int
+        get() = sp.getInt("kecerahan", KECERAHAN_BELUM)
+        set(v) = sp.edit().putInt("kecerahan", v).apply()
+
     var nyalaSaatCas: Boolean
         get() = sp.getBoolean("nyala_cas", true)
         set(v) = sp.edit().putBoolean("nyala_cas", v).apply()
@@ -107,6 +112,9 @@ class Setelan(context: Context) {
             Tema("cokelat", "Cokelat", "#8A5A3B"),
             Tema("abu", "Abu", "#475569"),
         )
+
+        const val KECERAHAN_OTOMATIS = -1
+        const val KECERAHAN_BELUM = -2
 
         const val MODE_GUDANG = "gudang"
         const val MODE_KASIR = "kasir"

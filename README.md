@@ -22,6 +22,10 @@ halaman uji), **warna tablet** (8 pilihan), **layar mati** (1/2/5/10 menit atau 
 tetap nyala saat dicas), ubah alamat, sembunyikan aplikasi, ganti PIN, status, mode perawatan
 (buka kunci sementara), dan lepas Ril.
 
+**Tab Pengaturan (tanpa PIN, untuk karyawan):** warna tablet, layar mati, dan **kecerahan** (penggeser
+5–100% atau otomatis). Kecerahan manual mencegah layar meredup sendiri di tempat agak gelap. Sebagai
+device owner berlaku untuk seluruh tablet; tanpa device owner hanya untuk layar Ril.
+
 **Cetak langsung (12 Nov 2026):** halaman kasir di dalam Ril mengirim struk lewat Ril langsung ke
 printer LAN (port 9100), tanpa penghubung cetak di laptop. Kalau printer tidak menjawab (pindah IP),
 Ril memindai Wi-Fi toko dan memakai printer Epson yang ditemukan. Paling aman: kunci IP printer di
